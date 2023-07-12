@@ -1,0 +1,78 @@
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[GetTableCounts]    Script Date: 7/12/2023 7:34:34 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER   PROCEDURE [dbo].[GetTableCounts]
+    @listOfTables NVARCHAR(MAX),
+    @objectName NVARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Variables to hold counts
+    DECLARE @successCount INT;
+    DECLARE @failureCount INT;
+    DECLARE @tableName NVARCHAR(100);
+    DECLARE @sql NVARCHAR(MAX);
+
+    -- Cursor to iterate over tables
+    DECLARE tableCursor CURSOR FOR
+    SELECT TableName
+    FROM (VALUES (@listOfTables)) AS T(TableName);
+
+    OPEN tableCursor;
+
+    -- Initialize counts
+    SET @successCount = 0;
+    SET @failureCount = 0;
+
+    -- Fetch the first table name
+    FETCH NEXT FROM tableCursor INTO @tableName;
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Dynamic SQL to retrieve success count
+        SET @sql = N'
+            SELECT
+                @SuccessCount = @SuccessCount + COUNT(*)
+            FROM ' + QUOTENAME(@tableName) + '
+            WHERE objectName = @ObjectName
+                AND injstatus = ''SUCCESS''
+        ';
+
+        -- Execute the dynamic SQL to update the success count
+        EXEC sp_executesql
+            @sql,
+            N'@SuccessCount INT OUTPUT, @ObjectName NVARCHAR(100)',
+            @SuccessCount = @successCount OUTPUT,
+            @ObjectName = @objectName;
+
+        -- Dynamic SQL to retrieve failure count
+        SET @sql = N'
+            SELECT
+                @FailureCount = @FailureCount + COUNT(*)
+            FROM ' + QUOTENAME(@tableName) + '
+            WHERE objectName = @ObjectName
+                AND injstatus = ''FAILURE''
+        ';
+
+        -- Execute the dynamic SQL to update the failure count
+        EXEC sp_executesql
+            @sql,
+            N'@FailureCount INT OUTPUT, @ObjectName NVARCHAR(100)',
+            @FailureCount = @failureCount OUTPUT,
+            @ObjectName = @objectName;
+
+        -- Fetch the next table name
+        FETCH NEXT FROM tableCursor INTO @tableName;
+    END;
+
+    CLOSE tableCursor;
+    DEALLOCATE tableCursor;
+
+    -- Select the overall success count and failure count
+    SELECT @successCount AS SuccessCount, @failureCount AS FailureCount;
+END;
