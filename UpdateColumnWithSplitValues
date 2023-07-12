@@ -1,0 +1,44 @@
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[UpdateColumnWithSplitValues]    Script Date: 7/12/2023 7:31:10 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER   PROCEDURE [dbo].[UpdateColumnWithSplitValues]
+    @tableName NVARCHAR(100),
+    @columnName NVARCHAR(100)
+AS
+BEGIN
+    -- Create a temporary table to hold the hashmap values
+    CREATE TABLE #hashmap (
+        SourceValue NVARCHAR(100),
+        TargetValue NVARCHAR(100)
+    )
+
+    -- Populate the temporary table with values from DataMapping table
+    INSERT INTO #hashmap (SourceValue, TargetValue)
+    SELECT source_value, target_value
+    FROM DataMapping where target_attribute=@columnName
+
+    -- Construct the dynamic SQL statement
+    DECLARE @sql NVARCHAR(MAX)
+    SET @sql = N'
+        UPDATE ' + QUOTENAME(@tableName) + N'
+        SET ' + QUOTENAME(@columnName) + N' = (
+            SELECT STRING_AGG(COALESCE(h.TargetValue, s.value), '','')
+            FROM (
+                SELECT value
+                FROM STRING_SPLIT(' + QUOTENAME(@columnName) + N', '','')
+                WHERE value <> ''''
+            ) AS s
+            LEFT JOIN #hashmap AS h ON s.value = h.SourceValue
+        )
+        WHERE ' + QUOTENAME(@columnName) + N' LIKE ''%,%'''
+
+    -- Execute the dynamic SQL statement
+    EXEC sp_executesql @sql
+
+    -- Drop the temporary table
+    DROP TABLE #hashmap
+END
