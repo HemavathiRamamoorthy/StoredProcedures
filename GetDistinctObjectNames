@@ -1,0 +1,57 @@
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[GetDistinctObjectNames]    Script Date: 7/12/2023 7:33:32 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER     PROCEDURE [dbo].[GetDistinctObjectNames]
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Create a temporary table to store the distinct objectName values
+    CREATE TABLE #DistinctObjectNames (
+        objectName NVARCHAR(128)
+    )
+
+    -- Declare variables
+    DECLARE @tableName NVARCHAR(128)
+    DECLARE @query NVARCHAR(MAX)
+
+    -- Declare a cursor to iterate over the tables
+    DECLARE tableCursor CURSOR FOR
+   	select distinct TABLE_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME LIKE '%INJ_OBJ_Metadata_Content' and COLUMN_NAME='objectName'
+
+    -- Open the cursor
+    OPEN tableCursor
+
+    -- Fetch the first row
+    FETCH NEXT FROM tableCursor INTO @tableName
+
+    -- Loop through the tables
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- Prepare a dynamic query to insert distinct objectName values into the temporary table
+        SET @query = 'INSERT INTO #DistinctObjectNames (objectName) SELECT DISTINCT objectName FROM ' + @tableName
+
+        -- Execute the dynamic query
+        EXEC sp_executesql @query
+
+        -- Fetch the next row
+        FETCH NEXT FROM tableCursor INTO @tableName
+    END
+
+    -- Close and deallocate the cursor
+    CLOSE tableCursor
+    DEALLOCATE tableCursor
+
+    -- Retrieve distinct objectName values from the temporary table
+    SELECT DISTINCT objectName
+    FROM #DistinctObjectNames
+
+    -- Drop the temporary table
+    DROP TABLE #DistinctObjectNames
+END
