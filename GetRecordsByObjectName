@@ -1,0 +1,31 @@
+USE [master]
+GO
+/****** Object:  StoredProcedure [dbo].[GetRecordsByObjectName]    Script Date: 7/12/2023 7:32:40 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER     PROCEDURE [dbo].[GetRecordsByObjectName]
+  @tableNames NVARCHAR(MAX),
+  @objectNameValue NVARCHAR(MAX)
+AS
+BEGIN
+  DECLARE @sql NVARCHAR(MAX);
+
+  SET @sql = '';
+
+  -- Build the dynamic SQL statement
+  SELECT @sql = @sql + N'
+    SELECT * FROM ' + QUOTENAME(name) + N'
+    WHERE objectName = @objectNameValue  AND injstatus = ''SUCCESS'' ORDER BY target_obj_id
+    UNION ALL '
+  FROM sys.tables
+  WHERE name IN (SELECT value FROM STRING_SPLIT(@tableNames, ','));
+
+  -- Remove the trailing UNION ALL
+  SET @sql = LEFT(@sql, LEN(@sql) - LEN('UNION ALL '));
+
+  -- Execute the dynamic SQL
+  EXEC sp_executesql @sql, N'@objectNameValue NVARCHAR(MAX)', @objectNameValue;
+
+END
